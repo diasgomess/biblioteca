@@ -140,3 +140,4 @@ C:\Users\mathe\Biblioteca\obj\Debug\net8.0\refint\Biblioteca.dll
 C:\Users\mathe\Biblioteca\obj\Debug\net8.0\Biblioteca.pdb
 C:\Users\mathe\Biblioteca\obj\Debug\net8.0\Biblioteca.genruntimeconfig.cache
 C:\Users\mathe\Biblioteca\obj\Debug\net8.0\ref\Biblioteca.dll
+C:\Users\mathe\Biblioteca\obj\Debug\net8.0\Biblioteca.sourcelink.json

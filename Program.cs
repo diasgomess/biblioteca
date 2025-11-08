@@ -1,32 +1,42 @@
 ﻿using System;
 using Biblioteca.Data;
 using Biblioteca.Models;
+using Biblioteca.Services;
 
 namespace Biblioteca
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
-            Console.WriteLine("Iniciando sistema de biblioteca...");
+            using var context = new BibliotecaContext();
+            context.Database.EnsureCreated();
 
-            using (var context = new BibliotecaContext())
-            {
-                context.Database.EnsureCreated(); // cria o banco se não existir
+            var livroService = new LivroUsuarioService(context);
+            var emprestimoService = new EmprestimoService(context);
+            var relatorioService = new RelatorioService(context);
 
-                var livro = new Livro
-                {
-                    ISBN = "1234567890",
-                    Titulo = "Programação em C#",
-                    Autor = "Fulano",
-                    Categoria = Categoria.TECNICO
-                };
+            // Cadastra um usuário e um livro
+            var usuario = new Usuario { Nome = "João Silva", Email = "joao@email.com", Tipo = TipoUsuario.ALUNO };
+            livroService.CadastrarUsuario(usuario);
 
-                context.Livros.Add(livro);
-                context.SaveChanges();
+            var livro = new Livro { ISBN = "001", Titulo = "C# Básico", Autor = "Fulano", Categoria = Categoria.TECNICO };
+            livroService.CadastrarLivro(livro);
 
-                Console.WriteLine($"Livro '{livro.Titulo}' cadastrado com sucesso!");
-            }
+            // Empréstimo
+            emprestimoService.RegistrarEmprestimo("001", usuario.Id);
+
+            // Simular devolução atrasada
+            var emprestimo = context.Emprestimos.First();
+            emprestimo.DataPrevistaDevolucao = DateTime.Now.AddDays(-3); // atrasado
+            context.SaveChanges();
+
+            emprestimoService.RegistrarDevolucao(emprestimo.Id);
+
+            // Relatórios
+            relatorioService.ListarLivrosMaisEmprestados();
+            relatorioService.ListarUsuariosComMaisEmprestimos();
+            relatorioService.ListarEmprestimosEmAtraso();
         }
     }
 }
