@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Biblioteca.Data;
 using Biblioteca.Models;
+using Biblioteca.Exceptions;
 
 namespace Biblioteca.Services
 {
@@ -16,18 +17,32 @@ namespace Biblioteca.Services
             _livroUsuarioService = new LivroUsuarioService(context);
         }
 
-        // 📥 Registrar empréstimo
+        // 📥 Registrar empréstimo com validações
         public void RegistrarEmprestimo(string isbn, int usuarioId)
         {
             var livro = _context.Livros.FirstOrDefault(l => l.ISBN == isbn);
             var usuario = _context.Usuarios.FirstOrDefault(u => u.Id == usuarioId);
 
-            if (livro == null) throw new Exception("Livro não encontrado.");
-            if (usuario == null) throw new Exception("Usuário não encontrado.");
+            if (livro == null)
+                throw new RegraNegocioException("Livro não encontrado.");
+
+            if (usuario == null)
+                throw new RegraNegocioException("Usuário não encontrado.");
+
             if (livro.Status != StatusLivro.DISPONIVEL)
-                throw new Exception("Livro não está disponível para empréstimo.");
+                throw new RegraNegocioException("Este livro já está emprestado ou reservado.");
+
             if (_livroUsuarioService.UsuarioAtingiuLimiteEmprestimos(usuarioId))
-                throw new Exception("Usuário já atingiu o limite de 3 empréstimos ativos.");
+                throw new RegraNegocioException("Usuário atingiu o limite de 3 empréstimos ativos.");
+
+            bool possuiMultaPendente = _context.Multas
+                .Any(m => m.Emprestimo != null &&
+                          m.Emprestimo.UsuarioId == usuarioId &&
+                          m.Status == StatusMulta.PENDENTE);
+
+
+            if (possuiMultaPendente)
+                throw new RegraNegocioException("Usuário possui multa pendente. Regularize antes de novo empréstimo.");
 
             int diasPrazo = usuario.Tipo == TipoUsuario.PROFESSOR ? 15 : 7;
 
@@ -41,29 +56,34 @@ namespace Biblioteca.Services
             };
 
             livro.Status = StatusLivro.EMPRESTADO;
+
             _context.Emprestimos.Add(emprestimo);
             _context.SaveChanges();
 
-            Console.WriteLine($"✅ Empréstimo registrado: {livro.Titulo} para {usuario.Nome}");
+            Console.WriteLine($"✅ Empréstimo registrado com sucesso para o livro '{livro.Titulo}'.");
         }
 
-        // 📤 Registrar devolução
+        // 📤 Registrar devolução com validações e multa
         public void RegistrarDevolucao(int emprestimoId)
         {
             var emprestimo = _context.Emprestimos.FirstOrDefault(e => e.Id == emprestimoId);
-            if (emprestimo == null) throw new Exception("Empréstimo não encontrado.");
+            if (emprestimo == null)
+                throw new RegraNegocioException("Empréstimo não encontrado.");
+
+            if (emprestimo.Status != StatusEmprestimo.ATIVO)
+                throw new RegraNegocioException("Este empréstimo já foi finalizado ou não está ativo.");
 
             emprestimo.DataRealDevolucao = DateTime.Now;
-            emprestimo.Status = StatusEmprestimo.FINALIZADO;
 
-            var livro = _context.Livros.First(l => l.ISBN == emprestimo.LivroISBN);
-            livro.Status = StatusLivro.DISPONIVEL;
+            var livro = _context.Livros.FirstOrDefault(l => l.ISBN == emprestimo.LivroISBN);
+            if (livro == null)
+                throw new RegraNegocioException("Livro vinculado ao empréstimo não encontrado.");
 
-            // Calcula multa se houver atraso
+            // Cálculo de multa automática
             if (emprestimo.DataRealDevolucao > emprestimo.DataPrevistaDevolucao)
             {
                 int diasAtraso = (emprestimo.DataRealDevolucao.Value - emprestimo.DataPrevistaDevolucao).Days;
-                decimal valorMulta = diasAtraso * 1.0m; // R$1 por dia
+                decimal valorMulta = diasAtraso * 1.0m;
 
                 var multa = new Multa
                 {
@@ -73,11 +93,15 @@ namespace Biblioteca.Services
                 };
 
                 _context.Multas.Add(multa);
-                Console.WriteLine($"⚠️ Multa gerada: R${valorMulta}");
+                Console.WriteLine($"⚠️ Multa gerada automaticamente: R${valorMulta}");
             }
 
+            // Atualizações finais
+            emprestimo.Status = StatusEmprestimo.FINALIZADO;
+            livro.Status = StatusLivro.DISPONIVEL;
+
             _context.SaveChanges();
-            Console.WriteLine($"📚 Devolução registrada para o empréstimo #{emprestimo.Id}");
+            Console.WriteLine($"📚 Devolução registrada com sucesso para o empréstimo #{emprestimo.Id}");
         }
     }
 }

@@ -2,6 +2,8 @@
 using Biblioteca.Data;
 using Biblioteca.Models;
 using Biblioteca.Services;
+using Biblioteca.Exceptions;
+using System.Linq;
 
 namespace Biblioteca
 {
@@ -14,29 +16,41 @@ namespace Biblioteca
 
             var livroService = new LivroUsuarioService(context);
             var emprestimoService = new EmprestimoService(context);
-            var relatorioService = new RelatorioService(context);
 
-            // Cadastra um usuário e um livro
-            var usuario = new Usuario { Nome = "João Silva", Email = "joao@email.com", Tipo = TipoUsuario.ALUNO };
+            var usuario = new Usuario { Nome = "Maria", Email = "maria@email.com", Tipo = TipoUsuario.ALUNO };
             livroService.CadastrarUsuario(usuario);
 
-            var livro = new Livro { ISBN = "001", Titulo = "C# Básico", Autor = "Fulano", Categoria = Categoria.TECNICO };
+            var livro = new Livro { ISBN = "123", Titulo = "Clean Code", Autor = "Robert C. Martin", Categoria = Categoria.TECNICO };
             livroService.CadastrarLivro(livro);
 
-            // Empréstimo
-            emprestimoService.RegistrarEmprestimo("001", usuario.Id);
+            try
+            {
+                // 1️⃣ Registrar o primeiro empréstimo (OK)
+                emprestimoService.RegistrarEmprestimo("123", usuario.Id);
 
-            // Simular devolução atrasada
-            var emprestimo = context.Emprestimos.First();
-            emprestimo.DataPrevistaDevolucao = DateTime.Now.AddDays(-3); // atrasado
-            context.SaveChanges();
+                // 2️⃣ Tentar emprestar o mesmo livro novamente (gera exceção)
+                emprestimoService.RegistrarEmprestimo("123", usuario.Id);
+            }
+            catch (RegraNegocioException ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"❌ Erro de regra de negócio: {ex.Message}");
+                Console.ResetColor();
+            }
 
-            emprestimoService.RegistrarDevolucao(emprestimo.Id);
+            try
+            {
+                // 3️⃣ Simular devolução atrasada
+                var emprestimo = context.Emprestimos.First();
+                emprestimo.DataPrevistaDevolucao = DateTime.Now.AddDays(-4);
+                context.SaveChanges();
 
-            // Relatórios
-            relatorioService.ListarLivrosMaisEmprestados();
-            relatorioService.ListarUsuariosComMaisEmprestimos();
-            relatorioService.ListarEmprestimosEmAtraso();
+                emprestimoService.RegistrarDevolucao(emprestimo.Id);
+            }
+            catch (RegraNegocioException ex)
+            {
+                Console.WriteLine($"⚠️ Erro: {ex.Message}");
+            }
         }
     }
 }
